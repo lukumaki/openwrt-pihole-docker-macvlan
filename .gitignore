@@ -1,0 +1,23 @@
+# Secrets and local environment files
+.env
+*.env
+!compose/.env.example
+
+# Backups
+*.bak
+*.backup
+*.tar
+*.tar.gz
+*.zip
+
+# Logs and temporary files
+*.log
+*.tmp
+*.swp
+*~
+
+# Editor and operating-system metadata
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

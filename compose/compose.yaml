@@ -1,0 +1,28 @@
+services:
+  pihole:
+    image: pihole/pihole:latest
+    container_name: pihole
+    hostname: pihole
+    restart: unless-stopped
+
+    environment:
+      TZ: "${TZ}"
+      FTLCONF_webserver_api_password: "${PIHOLE_PASSWORD}"
+      FTLCONF_dns_upstreams: "${DNS_UPSTREAMS}"
+
+    volumes:
+      - /opt/pihole/etc-pihole:/etc/pihole
+
+    networks:
+      pihole_outbound:
+      pihole_macvlan:
+        ipv4_address: "${PIHOLE_IP}"
+
+networks:
+  pihole_macvlan:
+    external: true
+    name: pihole_macvlan
+
+  pihole_outbound:
+    external: true
+    name: pihole_outbound
