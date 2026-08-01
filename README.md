@@ -48,7 +48,9 @@ The reference deployment uses the following addresses:
 These values are examples. Adjust them to match your own LAN and avoid address conflicts.
 
 ## Network topology
+[![Pi-hole v6 Docker networking topology](images/network-topology.png)](images/network-topology.png)
 
+> Click the diagram to open the full-resolution version.
 ```text
                              Internet
                                 |
