@@ -461,7 +461,35 @@ uci commit dhcp
 
 Then reconnect the device to the network.
 
-## 10. A browser bypasses Pi-hole
+## 10. Top Clients and the Query Log show only IP addresses
+
+Pi-hole is not the DHCP server here, so it needs conditional forwarding to learn device names from OpenWrt. See installation step 15, "Show device names instead of IP addresses".
+
+Check the setting:
+
+```sh
+docker exec pihole pihole-FTL --config dns.revServers
+```
+
+Expected, with your own local domain at the end:
+
+```text
+[ true,192.168.1.0/24,172.18.0.1,lan ]
+```
+
+Check that OpenWrt answers Pi-hole on the bridge address:
+
+```sh
+docker exec pihole dig +short -x 192.168.1.203 @172.18.0.1
+```
+
+If this prints a name but Pi-hole still shows addresses, wait for new queries; older entries are not renamed. If it prints nothing:
+
+- the device may not have sent a name with its DHCP request (common for some IoT devices); give it a name in OpenWrt under Network, DHCP and DNS, Static Leases
+- the router address must be `172.18.0.1`, not `192.168.1.1`, which Pi-hole cannot reach over macvlan
+- the domain must match `uci get dhcp.@dnsmasq[0].domain`
+
+## 11. A browser bypasses Pi-hole
 
 Some browsers can use DNS-over-HTTPS.
 
@@ -484,7 +512,7 @@ Also check operating-system features such as:
 
 Pi-hole can only filter requests that actually reach it.
 
-## 11. Pi-hole cannot reach `192.168.1.1`
+## 12. Pi-hole cannot reach `192.168.1.1`
 
 This can be normal.
 
@@ -511,7 +539,7 @@ LAN clients use Pi-hole through macvlan
 
 Do not treat host isolation as a failure unless host-to-container communication is a specific requirement.
 
-## 12. Pi-hole has two interfaces in the opposite order
+## 13. Pi-hole has two interfaces in the opposite order
 
 Example:
 
@@ -546,7 +574,7 @@ LAN route     -> 192.168.1.0/24
 
 The route matters more than whether Docker calls an interface `eth0` or `eth1`.
 
-## 13. Pi-hole starts but remains unhealthy
+## 14. Pi-hole starts but remains unhealthy
 
 Check status:
 
@@ -601,7 +629,7 @@ docker compose \
   config
 ```
 
-## 14. Pi-hole web interface does not open
+## 15. Pi-hole web interface does not open
 
 Test from a LAN client:
 
@@ -644,7 +672,7 @@ Check for:
 - firewall rules between VLANs
 - Pi-hole web service errors
 
-## 15. Docker network creation reports an address conflict
+## 16. Docker network creation reports an address conflict
 
 Before creating a network, inspect existing Docker networks:
 
@@ -684,7 +712,7 @@ if that subnet already exists elsewhere.
 
 Choose another private subnet and update the documentation and firewall configuration consistently.
 
-## 16. Docker reports that the network already exists
+## 17. Docker reports that the network already exists
 
 Example:
 
@@ -728,7 +756,7 @@ docker network rm NETWORK_NAME
 
 Recreate it carefully and start Pi-hole again.
 
-## 17. The custom bridge disappears after reboot
+## 18. The custom bridge disappears after reboot
 
 Check:
 
@@ -771,7 +799,7 @@ uci show dockerd
 
 If Docker starts before the required storage is mounted, custom networks and containers may not restore correctly.
 
-## 18. Pi-hole does not start automatically after reboot
+## 19. Pi-hole does not start automatically after reboot
 
 Check the restart policy:
 
@@ -819,7 +847,7 @@ A restart policy cannot fix:
 - corrupted persistent data
 - failed Docker startup
 
-## 19. IPv6 upstream servers report `Network unreachable`
+## 20. IPv6 upstream servers report `Network unreachable`
 
 The reference outbound bridge is IPv4-only.
 
@@ -854,7 +882,7 @@ unless IPv6 has been deliberately enabled on:
 - OpenWrt forwarding
 - firewall rules
 
-## 20. `apk update` or `opkg update` fails with DNS errors
+## 21. `apk update` or `opkg update` fails with DNS errors
 
 OpenWrt 25.12 and newer use `apk update`. Older releases use `opkg update`. The diagnosis is the same.
 
@@ -903,7 +931,7 @@ apk update    # OpenWrt 25.12 and newer
 opkg update   # OpenWrt 24.10 and older
 ```
 
-## 21. OpenWrt logs say DNS is limited to local subnets
+## 22. OpenWrt logs say DNS is limited to local subnets
 
 Example:
 
@@ -917,7 +945,7 @@ It means dnsmasq will answer clients from trusted local networks rather than bec
 
 It does not prevent the router from resolving names or serving local LAN clients.
 
-## 22. `wget` reports `Operation not permitted`
+## 23. `wget` reports `Operation not permitted`
 
 If DNS is broken, some OpenWrt tools may report errors that appear unrelated.
 
@@ -949,7 +977,7 @@ date
 logread | tail -n 100
 ```
 
-## 23. Devices behind the dumb AP have no Internet
+## 24. Devices behind the dumb AP have no Internet
 
 The dumb AP should bridge clients into the main LAN.
 
@@ -985,7 +1013,7 @@ On the dumb AP, verify:
 - the Ethernet uplink is connected LAN-to-LAN
 - no guest isolation blocks access to the main LAN
 
-## 24. A duplicate IP address causes intermittent failures
+## 25. A duplicate IP address causes intermittent failures
 
 Symptoms can include:
 
@@ -1018,7 +1046,7 @@ is:
 
 Reserve and document infrastructure addresses before deployment.
 
-## 25. Changes to `.env` do not affect the running container
+## 26. Changes to `.env` do not affect the running container
 
 Docker Compose environment changes require the container to be recreated.
 
@@ -1053,7 +1081,7 @@ docker logs --tail 100 pihole
 
 Restarting the existing container alone may not apply changed Compose environment variables.
 
-## 26. The Pi-hole GUI cannot change upstream DNS
+## 27. The Pi-hole GUI cannot change upstream DNS
 
 When upstreams are set through:
 
@@ -1082,7 +1110,7 @@ docker compose up -d --force-recreate
 
 Keeping configuration in Compose makes the deployment reproducible.
 
-## 27. NTP warnings or duplicate time services
+## 28. NTP warnings or duplicate time services
 
 OpenWrt already manages router time synchronization.
 
@@ -1125,7 +1153,7 @@ date
 
 Containers inherit the host clock.
 
-## 28. Clients on another subnet get no answer from Pi-hole
+## 29. Clients on another subnet get no answer from Pi-hole
 
 Example: devices on a guest VLAN or a VPN subnet receive `192.168.1.2` as DNS server but every lookup times out or is refused.
 
@@ -1152,7 +1180,7 @@ docker compose up -d --force-recreate
 
 Also make sure the OpenWrt firewall allows that zone to forward to `lan` on port 53. See [Networking explained](networking-explained.md#dns-listening-mode).
 
-## 29. Safe diagnostic sequence
+## 30. Safe diagnostic sequence
 
 When the cause is unclear, run these checks in order:
 
@@ -1181,7 +1209,7 @@ nslookup doubleclick.net
 
 This sequence moves from the container outward and avoids guesswork.
 
-## 30. Information to include when asking for help
+## 31. Information to include when asking for help
 
 Collect:
 
@@ -1235,6 +1263,7 @@ Never publish the real contents of:
 | `apk update` or `opkg update` fails by hostname | OpenWrt DNS |
 | Guest or VPN clients get no answer | `dns.listeningMode` is `LOCAL` |
 | Some devices skip Pi-hole | router announces itself as IPv6 DNS (`dns_service`) |
+| Dashboard shows IP addresses, not names | conditional forwarding (`REV_SERVERS`) |
 | IPv6 upstream says unreachable | IPv4-only outbound bridge |
 | Works until reboot | Docker startup or persistence |
 | Dumb AP clients have wrong gateway | competing DHCP or routing |

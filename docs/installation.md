@@ -572,12 +572,13 @@ PIHOLE_PASSWORD=replace-with-a-strong-password
 PIHOLE_IP=192.168.1.2
 PIHOLE_OUTBOUND_IP=172.18.0.2
 DNS_UPSTREAMS=9.9.9.9;149.112.112.112
+REV_SERVERS=true,192.168.1.0/24,172.18.0.1,lan
 DNS_LISTENING_MODE=LOCAL
 PIHOLE_TAG=latest
 ENVEOF
 ```
 
-If you are reusing an older `.env` file that lacks `PIHOLE_OUTBOUND_IP`, `DNS_LISTENING_MODE` or `PIHOLE_TAG`, Compose falls back to `172.18.0.2`, `LOCAL` and `latest`. Adding them explicitly is still clearer.
+If you are reusing an older `.env` file that lacks `PIHOLE_OUTBOUND_IP`, `REV_SERVERS`, `DNS_LISTENING_MODE` or `PIHOLE_TAG`, Compose falls back to `172.18.0.2`, `true,192.168.1.0/24,172.18.0.1,lan`, `LOCAL` and `latest`. Adding them explicitly is still clearer.
 
 Replace:
 
@@ -628,6 +629,11 @@ services:
       # macvlan). Use ALL only if clients on other routed OpenWrt subnets
       # (guest VLAN, VPN) must use Pi-hole. See docs/networking-explained.md.
       FTLCONF_dns_listeningMode: "${DNS_LISTENING_MODE:-LOCAL}"
+
+      # Conditional forwarding: ask OpenWrt for device names, so Pi-hole shows
+      # "laptop.lan" instead of "192.168.1.123". Uses 172.18.0.1 because macvlan
+      # cannot reach the router at 192.168.1.1. See docs/installation.md step 15.
+      FTLCONF_dns_revServers: "${REV_SERVERS:-true,192.168.1.0/24,172.18.0.1,lan}"
 
       # OpenWrt already synchronizes the router clock and offers NTP.
       # Without SYS_TIME, Pi-hole's NTP client cannot set the time anyway.
@@ -911,6 +917,52 @@ cp /root/dhcp.before-pihole /etc/config/dhcp
 /etc/init.d/dnsmasq restart
 /etc/init.d/odhcpd restart
 ```
+
+### Show device names instead of IP addresses
+
+Pi-hole's dashboard (Top Clients, Query Log) shows which device asked for what. Pi-hole learns device names from DHCP, but here OpenWrt is the DHCP server, not Pi-hole. Without help, Pi-hole only sees addresses such as `192.168.1.123`.
+
+OpenWrt already knows every name: when a device gets its address, it tells OpenWrt its name, and OpenWrt's dnsmasq can answer "who is `192.168.1.123`?" with `laptop.lan`. **Conditional forwarding** (`dns.revServers` in Pi-hole) tells Pi-hole to ask OpenWrt those questions, and to send lookups for local names like `laptop.lan` to OpenWrt as well.
+
+The Compose file sets it from `.env`:
+
+```text
+REV_SERVERS=true,192.168.1.0/24,172.18.0.1,lan
+```
+
+The four parts:
+
+| Part | Meaning |
+|---|---|
+| `true` | Conditional forwarding is on |
+| `192.168.1.0/24` | Your LAN: addresses Pi-hole should ask OpenWrt about |
+| `172.18.0.1` | Where to ask: OpenWrt, as Pi-hole reaches it |
+| `lan` | Your local domain: names ending in `.lan` go to OpenWrt too |
+
+**Why `172.18.0.1` and not `192.168.1.1`?** macvlan does not let a container talk to its own host, so Pi-hole cannot reach OpenWrt at `192.168.1.1`. It can reach OpenWrt through the outbound bridge, where the router is `172.18.0.1`. OpenWrt's dnsmasq answers there because `br-pihole-out` is a local network of the router and the `docker` firewall zone accepts input.
+
+**Find your local domain** on the router:
+
+```sh
+uci get dhcp.@dnsmasq[0].domain
+```
+
+OpenWrt's default is `lan`. If yours is different, for example `home.lan`, change the last part of `REV_SERVERS` to match, then recreate Pi-hole:
+
+```sh
+cd /etc/docker/pihole
+docker compose up -d --force-recreate
+```
+
+Test that Pi-hole can now look up a device by its address (use the address of a real device):
+
+```sh
+docker exec pihole dig +short -x 192.168.1.203 @127.0.0.1
+```
+
+It should print a name such as `frixos-pc.lan.`. Names appear in the dashboard for new queries; older entries keep showing the address.
+
+Because the value comes from `.env`, the setting is read-only in Pi-hole's web interface (Settings, DNS, Conditional forwarding). Change it in `.env` instead.
 
 > [!NOTE]
 > Tested on OpenWrt 25.12.6: `dns_service` is supported by its `odhcpd`. On much older releases, check with `strings /usr/sbin/odhcpd | grep dns_service`.

@@ -23,6 +23,7 @@ The Compose file follows the official guide at <https://docs.pi-hole.net/docker/
 | `pihole/pihole:latest` | Same, with an optional `PIHOLE_TAG` for pinning or rollback |
 | `/etc/pihole` volume | Same, stored at `/opt/pihole/etc-pihole` |
 | `TZ`, `FTLCONF_webserver_api_password`, `FTLCONF_dns_upstreams` | Same, read from `.env` |
+| `FTLCONF_dns_revServers` example (conditional forwarding) | Set from `REV_SERVERS`, pointing at OpenWrt through `172.18.0.1` |
 | `FTLCONF_dns_listeningMode: 'ALL'` | Set explicitly, `LOCAL` by default because clients reach Pi-hole directly through macvlan |
 | `restart: unless-stopped` | Same |
 | Published ports 53, 80 and 443 | Not needed: Pi-hole owns its own LAN address |

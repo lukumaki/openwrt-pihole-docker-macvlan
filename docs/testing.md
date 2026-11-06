@@ -568,6 +568,7 @@ A complete installation should pass all of these checks:
 - [ ] DHCP advertises `192.168.1.2`
 - [ ] The router does not announce itself as IPv6 DNS (`dhcp.lan.dns_service='0'`)
 - [ ] Clients report Pi-hole as their DNS server
+- [ ] Pi-hole shows device names (conditional forwarding works)
 - [ ] Normal domains resolve
 - [ ] Blocked domains return a blocking response
 - [ ] The Pi-hole dashboard is reachable

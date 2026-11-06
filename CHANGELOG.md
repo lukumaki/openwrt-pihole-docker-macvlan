@@ -25,6 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Instructions for copying the project to the router with `scp -O`
 - Step 15 now stops OpenWrt announcing itself as IPv6 DNS (`dns_service '0'`), so devices cannot bypass Pi-hole over IPv6, plus a matching troubleshooting entry
 - Backup and undo commands for the firewall and DHCP steps
+- Conditional forwarding (`FTLCONF_dns_revServers` via `REV_SERVERS`) so Pi-hole shows device names from OpenWrt, using `172.18.0.1` because macvlan cannot reach `192.168.1.1`
 
 ### Changed
 

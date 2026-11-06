@@ -23,6 +23,11 @@ services:
       # (guest VLAN, VPN) must use Pi-hole. See docs/networking-explained.md.
       FTLCONF_dns_listeningMode: "${DNS_LISTENING_MODE:-LOCAL}"
 
+      # Conditional forwarding: ask OpenWrt for device names, so Pi-hole shows
+      # "laptop.lan" instead of "192.168.1.123". Uses 172.18.0.1 because macvlan
+      # cannot reach the router at 192.168.1.1. See docs/installation.md step 15.
+      FTLCONF_dns_revServers: "${REV_SERVERS:-true,192.168.1.0/24,172.18.0.1,lan}"
+
       # OpenWrt already synchronizes the router clock and offers NTP.
       # Without SYS_TIME, Pi-hole's NTP client cannot set the time anyway.
       FTLCONF_ntp_sync_active: "false"
