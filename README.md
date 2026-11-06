@@ -45,6 +45,9 @@ The differences are explained in [Networking explained](docs/networking-explaine
 - DNSSEC and upstream resolver testing
 - Optional OpenWrt dumb access point integration
 - Troubleshooting common macvlan and DNS problems
+- Reinstalling on a router where Docker is already running
+- Upgrading and rolling back the Pi-hole image
+- Both package managers: `apk` (OpenWrt 25.12 and newer) and `opkg` (older releases)
 
 ## Tested network layout
 
@@ -107,6 +110,16 @@ Internet traffic -> pihole_outbound -> 172.18.0.1 -> OpenWrt WAN
 
 This keeps the LAN-facing and outbound paths separate and predictable.
 
+Docker has to be told which of the two networks provides the default route. The Compose file sets `gw_priority: 1` on `pihole_outbound` for this. Without it, recent Docker versions (tested on Docker Engine 29) choose the macvlan gateway `192.168.1.1`, and blocklist downloads and upstream DNS fail. Docker Engine 28 or newer is needed for `gw_priority`; older versions ignore it.
+
+After every install or upgrade, check:
+
+```sh
+docker exec pihole ip route
+```
+
+The first line must be `default via 172.18.0.1`.
+
 ## DNS responsibilities
 
 OpenWrt and Pi-hole both keep their DNS services enabled because they listen on different IP addresses:
@@ -128,7 +141,7 @@ This avoids a port conflict and prevents the router from depending on a macvlan 
 
 ## Project status
 
-The reference deployment has passed the following checks:
+The reference deployment passed the checks below with the original Compose file (version 0.1.0):
 
 - Pi-hole container reports healthy
 - Normal DNS queries resolve
@@ -139,6 +152,8 @@ The reference deployment has passed the following checks:
 - Pi-hole starts automatically after reboot
 - OpenWrt package management continues working
 - Clients connected through an OpenWrt dumb AP use Pi-hole normally
+
+The current Compose file (unreleased changes in the [Changelog](CHANGELOG.md)) has been tested with Docker Engine 29 and the current `pihole/pihole:latest` image, but not yet on a real OpenWrt router. Run [Testing and validation](docs/testing.md) after installing.
 
 ## Repository layout
 
@@ -157,6 +172,7 @@ The reference deployment has passed the following checks:
 │   ├── testing.md
 │   └── troubleshooting.md
 ├── images
+│   └── network-topology.png
 └── scripts
     ├── backup.sh
     └── restore.sh
@@ -213,8 +229,9 @@ The full instructions are in [docs/installation.md](docs/installation.md), but t
 9. Install the Compose file.
 10. Start Pi-hole.
 11. Advertise `192.168.1.2` through DHCP option 6.
-12. Validate DNS, blocking, DNSSEC, and reboot persistence.
-13. Upgrade later with `docker compose pull`, `down`, and `up -d`.
+12. Check that the container's default route is `via 172.18.0.1`.
+13. Validate DNS, blocking, DNSSEC, and reboot persistence.
+14. Upgrade later with `docker compose pull`, `down`, and `up -d`.
 
 ## Security notes
 
