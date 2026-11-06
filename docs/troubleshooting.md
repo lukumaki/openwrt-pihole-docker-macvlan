@@ -67,6 +67,30 @@ default via 172.18.0.1
 
 If the default route points through the macvlan interface instead, outbound traffic may fail.
 
+This happens with recent Docker versions when nothing tells Docker which network should provide the default gateway. The reference `compose.yaml` therefore sets:
+
+```yaml
+    networks:
+      pihole_outbound:
+        ipv4_address: "${PIHOLE_OUTBOUND_IP:-172.18.0.2}"
+        gw_priority: 1
+```
+
+`gw_priority` needs Docker Engine 28 or newer and Docker Compose 2.33 or newer. Check with:
+
+```sh
+docker version --format '{{.Server.Version}}'
+docker compose version
+```
+
+Older versions ignore the line without an error. If your `compose.yaml` was copied before this setting existed, copy the current file again and recreate the container:
+
+```sh
+cd /etc/docker/pihole
+docker compose up -d --force-recreate
+docker exec pihole ip route
+```
+
 Confirm both networks are attached:
 
 ```sh
@@ -804,7 +828,9 @@ unless IPv6 has been deliberately enabled on:
 - OpenWrt forwarding
 - firewall rules
 
-## 19. `opkg update` fails with DNS errors
+## 19. `apk update` or `opkg update` fails with DNS errors
+
+OpenWrt 25.12 and newer use `apk update`. Older releases use `opkg update`. The diagnosis is the same.
 
 First test raw connectivity:
 
@@ -847,7 +873,8 @@ Retest:
 
 ```sh
 nslookup downloads.openwrt.org
-opkg update
+apk update    # OpenWrt 25.12 and newer
+opkg update   # OpenWrt 24.10 and older
 ```
 
 ## 20. OpenWrt logs say DNS is limited to local subnets
@@ -1042,7 +1069,27 @@ OpenWrt -> time synchronization
 Pi-hole -> DNS filtering
 ```
 
-Disable Pi-hole NTP server, client, and RTC features unless they are intentionally needed.
+The reference Compose file already disables Pi-hole's NTP features:
+
+```yaml
+FTLCONF_ntp_sync_active: "false"
+FTLCONF_ntp_ipv4_active: "false"
+FTLCONF_ntp_ipv6_active: "false"
+```
+
+The container also does not receive `SYS_TIME`, so Pi-hole cannot change the router clock. The RTC feature is off by default in Pi-hole v6.
+
+If you see warnings such as `Insufficient permissions to set system time`, check that these variables are present:
+
+```sh
+docker exec pihole pihole-FTL --config ntp.sync.active
+```
+
+Expected:
+
+```text
+false
+```
 
 Always confirm the OpenWrt host time is correct:
 
@@ -1052,7 +1099,34 @@ date
 
 Containers inherit the host clock.
 
-## 27. Safe diagnostic sequence
+## 27. Clients on another subnet get no answer from Pi-hole
+
+Example: devices on a guest VLAN or a VPN subnet receive `192.168.1.2` as DNS server but every lookup times out or is refused.
+
+Pi-hole's default `LOCAL` listening mode answers only clients on subnets attached to the container, which here means `192.168.1.0/24` and the outbound bridge.
+
+Check the current mode:
+
+```sh
+docker exec pihole pihole-FTL --config dns.listeningMode
+```
+
+If clients on other routed subnets must use Pi-hole, set this in `/etc/docker/pihole/.env`:
+
+```text
+DNS_LISTENING_MODE=ALL
+```
+
+and recreate the container:
+
+```sh
+cd /etc/docker/pihole
+docker compose up -d --force-recreate
+```
+
+Also make sure the OpenWrt firewall allows that zone to forward to `lan` on port 53. See [Networking explained](networking-explained.md#dns-listening-mode).
+
+## 28. Safe diagnostic sequence
 
 When the cause is unclear, run these checks in order:
 
@@ -1081,7 +1155,7 @@ nslookup doubleclick.net
 
 This sequence moves from the container outward and avoids guesswork.
 
-## 28. Information to include when asking for help
+## 29. Information to include when asking for help
 
 Collect:
 
@@ -1132,7 +1206,8 @@ Never publish the real contents of:
 | Clients cannot reach `192.168.1.2` | macvlan, LAN, or IP conflict |
 | Clients use `192.168.1.1` for DNS | DHCP option 6 |
 | OpenWrt can ping IPs but not names | local dnsmasq disabled |
-| `opkg update` fails by hostname | OpenWrt DNS |
+| `apk update` or `opkg update` fails by hostname | OpenWrt DNS |
+| Guest or VPN clients get no answer | `dns.listeningMode` is `LOCAL` |
 | IPv6 upstream says unreachable | IPv4-only outbound bridge |
 | Works until reboot | Docker startup or persistence |
 | Dumb AP clients have wrong gateway | competing DHCP or routing |

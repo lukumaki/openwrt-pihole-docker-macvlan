@@ -211,6 +211,20 @@ The exact formatting may vary.
 
 The important part is that only the intended upstream resolvers are listed.
 
+Also confirm the listening mode and that Pi-hole's NTP client is off:
+
+```sh
+docker exec pihole pihole-FTL --config dns.listeningMode
+docker exec pihole pihole-FTL --config ntp.sync.active
+```
+
+Expected with the reference `.env`:
+
+```text
+LOCAL
+false
+```
+
 ## 7. Verify OpenWrt's own Internet connection
 
 Test raw Internet access from OpenWrt:
@@ -240,7 +254,8 @@ rm -f /tmp/openwrt-test.html
 Test package index access:
 
 ```sh
-opkg update
+apk update    # OpenWrt 25.12 and newer
+opkg update   # OpenWrt 24.10 and older
 ```
 
 If raw IP connectivity works but hostname resolution fails, inspect:
@@ -549,7 +564,7 @@ A complete installation should pass all of these checks:
 - [ ] Pi-hole reaches Quad9
 - [ ] Gravity downloads successfully
 - [ ] OpenWrt resolves hostnames
-- [ ] `opkg update` works
+- [ ] `apk update` (or `opkg update` on older releases) works
 - [ ] DHCP advertises `192.168.1.2`
 - [ ] Clients report Pi-hole as their DNS server
 - [ ] Normal domains resolve

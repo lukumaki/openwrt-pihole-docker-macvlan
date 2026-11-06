@@ -18,6 +18,47 @@ The reference deployment was built with:
 >
 > Check your own LAN subnet, DHCP range, bridge names, and unused addresses first.
 
+The Compose file follows the official Pi-hole Docker guide at <https://docs.pi-hole.net/docker/> (same image, `/etc/pihole` volume, `FTLCONF_*` variables and `restart: unless-stopped`). It differs only where macvlan requires it: no `ports:` section, two external networks, and no `NET_ADMIN` or `SYS_TIME` capabilities because Pi-hole does not run DHCP or set the router clock here.
+
+## 0. Reinstalling on a router where Docker is already running
+
+Skip this section on a fresh router.
+
+If Docker is already installed and running, start by recording what already exists so that nothing is overwritten by accident:
+
+```sh
+docker version
+docker compose version
+docker ps -a
+docker network ls
+uci -q show firewall.docker
+uci -q show firewall.pihole_docker_wan
+ls -la /etc/docker/pihole /opt/pihole/etc-pihole 2>/dev/null
+```
+
+Then decide, for each item, whether to keep or replace it:
+
+| Item | Keep it when | Replace it when |
+|---|---|---|
+| `pihole` container | never; it is recreated by Compose | always: `docker compose -f /etc/docker/pihole/compose.yaml down` or `docker rm -f pihole` |
+| `pihole_macvlan` network | `docker network inspect` shows the subnet, gateway and `parent` from step 4 | any value differs |
+| `pihole_outbound` network | it uses `172.18.0.0/16`, gateway `172.18.0.1` and bridge name `br-pihole-out` | any value differs |
+| `/opt/pihole/etc-pihole` | you want to keep lists, groups, clients and query history | you want a clean Pi-hole |
+| `/etc/docker/pihole/.env` | it still holds the right password and addresses | always compare it with the new `compose/.env.example` |
+
+If you have a backup made with `scripts/backup.sh`, take a fresh one now before changing anything.
+
+To start Pi-hole with a clean configuration, move the old data aside instead of deleting it:
+
+```sh
+mv /opt/pihole/etc-pihole /opt/pihole/etc-pihole.old-$(date +%Y%m%d)
+```
+
+> [!NOTE]
+> Settings passed as `FTLCONF_*` environment variables always win over values stored in `/opt/pihole/etc-pihole/pihole.toml`, and they are read-only in the web interface. Reusing old data is therefore safe: the password, upstreams and listening mode come from the new `.env` file.
+>
+> The official guide mounts `/etc/dnsmasq.d` only when migrating from Pi-hole v5. A fresh v6 installation like this one does not need it.
+
 ## 1. Confirm the OpenWrt network layout
 
 Run:
@@ -55,31 +96,43 @@ The reference DHCP range is:
 
 Pi-hole uses `192.168.1.2`, which is outside that pool.
 
-## 2. Install Docker packages
+## 2. Install or verify the Docker packages
 
-Update the OpenWrt package index:
+If Docker is already running, only check that the required packages are present and skip the install command.
+
+OpenWrt 25.12 and newer use the `apk` package manager. OpenWrt 24.10 and older use `opkg`. Check which one your router has:
+
+```sh
+command -v apk || command -v opkg
+```
+
+On OpenWrt 25.12 and newer:
+
+```sh
+apk update
+apk add docker dockerd docker-compose luci-app-dockerman kmod-macvlan
+apk info | grep -E 'docker|compose|macvlan'
+```
+
+On OpenWrt 24.10 and older:
 
 ```sh
 opkg update
-```
-
-Install Docker, Docker Compose, LuCI Docker support, and macvlan kernel support:
-
-```sh
 opkg install \
   docker \
   dockerd \
   docker-compose \
   luci-app-dockerman \
   kmod-macvlan
+opkg list-installed | grep -E 'docker|dockerd|compose|macvlan'
 ```
 
-Package names can vary between OpenWrt releases.
+Package names can vary between OpenWrt releases. `dockerd` provides the `/etc/init.d/dockerd` service, and `kmod-macvlan` is required for the macvlan network.
 
-Confirm the installed packages with:
+Confirm that the macvlan module is loaded:
 
 ```sh
-opkg list-installed | grep -E 'docker|dockerd|compose|macvlan'
+lsmod | grep macvlan
 ```
 
 Enable and start Docker:
@@ -95,6 +148,8 @@ Verify:
 docker version
 docker compose version
 ```
+
+`docker compose` (Compose v2, with a space) is used throughout this guide, as in the official Pi-hole guide.
 
 ## 3. Create persistent directories
 
@@ -136,7 +191,13 @@ Pi-hole runtime data is kept under `/opt`.
 
 The macvlan network gives Pi-hole its own address on the physical LAN.
 
-Create it with:
+If it already exists from a previous installation, inspect it and keep it when it matches the values below:
+
+```sh
+docker network inspect pihole_macvlan
+```
+
+Otherwise create it with:
 
 ```sh
 docker network create \
@@ -175,7 +236,17 @@ Macvlan alone can introduce host-isolation and routing problems.
 
 The dedicated outbound bridge gives Pi-hole a predictable default route for Internet access.
 
-Create it with:
+On a router where Docker is already running, other Compose projects may already use `172.18.0.0/16`, because it is the first subnet Docker hands out to new networks. List the subnets in use:
+
+```sh
+docker network inspect $(docker network ls -q) \
+  --format '{{.Name}} {{range .IPAM.Config}}{{.Subnet}} {{end}}'
+ip route
+```
+
+If `172.18.0.0/16` is used by anything other than an existing, correct `pihole_outbound`, pick another private subnet and use it consistently in the command below, in `PIHOLE_OUTBOUND_IP`, and in the firewall checks.
+
+Create the network with:
 
 ```sh
 docker network create \
@@ -193,6 +264,7 @@ Docker network: pihole_outbound
 Linux bridge: br-pihole-out
 Bridge subnet: 172.18.0.0/16
 Bridge gateway: 172.18.0.1
+Pi-hole address: 172.18.0.2 (pinned in Compose through PIHOLE_OUTBOUND_IP)
 ```
 
 Verify:
@@ -204,7 +276,13 @@ ip address show br-pihole-out
 
 ## 6. Add the outbound bridge to the OpenWrt firewall
 
-Create or update the Docker firewall zone:
+The OpenWrt `dockerd` package normally creates a `docker` firewall zone already. Inspect it first:
+
+```sh
+uci -q show firewall.docker
+```
+
+Create or update the Docker firewall zone. The `del_list` line removes an existing `br-pihole-out` entry first, so running these commands twice does not create a duplicate:
 
 ```sh
 uci set firewall.docker='zone'
@@ -213,6 +291,7 @@ uci set firewall.docker.input='ACCEPT'
 uci set firewall.docker.output='ACCEPT'
 uci set firewall.docker.forward='ACCEPT'
 uci set firewall.docker.network='docker'
+uci -q del_list firewall.docker.device='br-pihole-out'
 uci add_list firewall.docker.device='br-pihole-out'
 ```
 
@@ -274,9 +353,14 @@ cat > /etc/docker/pihole/.env <<'ENVEOF'
 TZ=Europe/Athens
 PIHOLE_PASSWORD=replace-with-a-strong-password
 PIHOLE_IP=192.168.1.2
+PIHOLE_OUTBOUND_IP=172.18.0.2
 DNS_UPSTREAMS=9.9.9.9;149.112.112.112
+DNS_LISTENING_MODE=LOCAL
+PIHOLE_TAG=latest
 ENVEOF
 ```
+
+If you are reusing an older `.env` file that lacks `PIHOLE_OUTBOUND_IP`, `DNS_LISTENING_MODE` or `PIHOLE_TAG`, Compose falls back to `172.18.0.2`, `LOCAL` and `latest`. Adding them explicitly is still clearer.
 
 Replace:
 
@@ -303,9 +387,17 @@ cp compose/compose.yaml /etc/docker/pihole/compose.yaml
 The file should contain:
 
 ```yaml
+# Pi-hole v6 on OpenWrt x86/64 with macvlan and a dedicated outbound bridge.
+# Based on the official quick-start: https://docs.pi-hole.net/docker/
+#
+# Differences from the official example are deliberate:
+# - no "ports:" section, because macvlan gives Pi-hole its own LAN address
+# - two external networks instead of the default bridge
+# - NET_ADMIN and SYS_TIME are not added (no Pi-hole DHCP, OpenWrt keeps the clock)
+
 services:
   pihole:
-    image: pihole/pihole:latest
+    image: "pihole/pihole:${PIHOLE_TAG:-latest}"
     container_name: pihole
     hostname: pihole
     restart: unless-stopped
@@ -315,11 +407,34 @@ services:
       FTLCONF_webserver_api_password: "${PIHOLE_PASSWORD}"
       FTLCONF_dns_upstreams: "${DNS_UPSTREAMS}"
 
+      # LOCAL answers clients on directly attached subnets (the LAN through
+      # macvlan). Use ALL only if clients on other routed OpenWrt subnets
+      # (guest VLAN, VPN) must use Pi-hole. See docs/networking-explained.md.
+      FTLCONF_dns_listeningMode: "${DNS_LISTENING_MODE:-LOCAL}"
+
+      # OpenWrt already synchronizes the router clock and offers NTP.
+      # Without SYS_TIME, Pi-hole's NTP client cannot set the time anyway.
+      FTLCONF_ntp_sync_active: "false"
+      FTLCONF_ntp_ipv4_active: "false"
+      FTLCONF_ntp_ipv6_active: "false"
+
     volumes:
+      # Persists Pi-hole's databases and pihole.toml between container upgrades.
       - /opt/pihole/etc-pihole:/etc/pihole
+
+    cap_add:
+      # Optional (official example): gives FTL more processing time under load.
+      - SYS_NICE
+      # Only needed if Pi-hole becomes the DHCP server. Not used in this guide.
+      # - NET_ADMIN
 
     networks:
       pihole_outbound:
+        ipv4_address: "${PIHOLE_OUTBOUND_IP:-172.18.0.2}"
+        # Makes 172.18.0.1 the default route (Docker Engine 28+ / Compose 2.33+).
+        # Without it, recent Docker versions may pick the macvlan gateway.
+        # Older versions silently ignore this line.
+        gw_priority: 1
       pihole_macvlan:
         ipv4_address: "${PIHOLE_IP}"
 
@@ -335,11 +450,16 @@ networks:
 
 Important characteristics:
 
+- same image, volume and restart policy as the official Pi-hole guide
 - no host networking
-- no published ports
+- no published ports, because Pi-hole owns `192.168.1.2` directly
 - no legacy Pi-hole environment variables
 - both Docker networks are external
-- Pi-hole receives a fixed LAN address
+- Pi-hole receives a fixed LAN address and a fixed bridge address
+- `gw_priority: 1` makes the outbound bridge the default route on current Docker versions
+- `FTLCONF_dns_listeningMode` is set explicitly instead of relying on the default
+- Pi-hole's NTP client and server are disabled because OpenWrt already provides time
+- `SYS_NICE` is added as in the official example; `NET_ADMIN` and `SYS_TIME` are left out because they are only needed for Pi-hole DHCP and for setting the host clock
 - persistent configuration is stored outside the container
 
 ## 9. Validate the Compose configuration
@@ -356,9 +476,11 @@ This should display the fully rendered configuration without errors.
 Confirm that it shows:
 
 ```text
-PIHOLE_IP: 192.168.1.2
-pihole_macvlan: external
-pihole_outbound: external
+image: pihole/pihole:latest
+FTLCONF_dns_listeningMode: LOCAL
+pihole_macvlan:  ipv4_address: 192.168.1.2
+pihole_outbound: ipv4_address: 172.18.0.2
+both networks:   external: true
 ```
 
 ## 10. Start Pi-hole
@@ -418,6 +540,8 @@ default via 172.18.0.1
 
 The interface names may appear as `eth0` and `eth1` in either order.
 
+If the default route is `via 192.168.1.1` instead, Gravity downloads and upstream DNS will fail. See [Troubleshooting section 2](troubleshooting.md#2-pi-hole-is-running-but-cannot-reach-the-internet).
+
 The important part is the routes, not the interface numbering.
 
 ## 12. Test outbound access
@@ -449,6 +573,8 @@ From a LAN client, open:
 ```text
 http://192.168.1.2/admin/
 ```
+
+Pi-hole v6 also serves HTTPS with a self-signed certificate, so `https://192.168.1.2/admin/` works after accepting the browser warning.
 
 Log in using the password stored in:
 
@@ -590,6 +716,33 @@ A successful reboot test confirms that:
 - Pi-hole starts automatically
 - DHCP continues advertising Pi-hole
 - filtered DNS resumes without manual intervention
+
+## 18. Upgrading and rolling back
+
+Inside the container, `pihole -up` is disabled. As the official guide describes, upgrade by pulling a new image and recreating the container:
+
+```sh
+cd /etc/docker/pihole
+docker compose pull
+docker compose down
+docker compose up -d
+```
+
+`docker compose down` removes only the container. The external networks and `/opt/pihole/etc-pihole` stay in place.
+
+Read the Pi-hole Docker release notes before upgrading:
+
+```text
+https://github.com/pi-hole/docker-pi-hole/releases
+```
+
+To roll back, set an earlier date-based tag in `/etc/docker/pihole/.env`, for example:
+
+```text
+PIHOLE_TAG=2026.10.0
+```
+
+then run the same three commands again. Take a backup with `scripts/backup.sh` before upgrading, because a newer Pi-hole may migrate its databases.
 
 ---
 

@@ -6,12 +6,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Graphical network topology diagram
+- Comparison with the official Pi-hole Docker guide in the README
+- Reinstall checklist for routers where Docker is already running
+- `apk` commands for OpenWrt 25.12 and newer, next to the `opkg` commands
+- Check for Docker subnet conflicts before creating `pihole_outbound`
+- `PIHOLE_TAG` to pin or roll back the Pi-hole image
+- Upgrade and rollback guidance following the official guide
+- `SYS_NICE` capability, as in the official example
+- Troubleshooting for clients on other subnets and for the default gateway
+- Pi-hole image and version details in the backup diagnostics
+
+### Changed
+
+- `gw_priority: 1` on `pihole_outbound` keeps `172.18.0.1` as the default route on Docker Engine 28+, where the macvlan gateway was otherwise chosen
+- Pi-hole's bridge address is pinned to `172.18.0.2` through `PIHOLE_OUTBOUND_IP`
+- `FTLCONF_dns_listeningMode` is set explicitly, `LOCAL` by default, through `DNS_LISTENING_MODE`
+- Pi-hole's NTP client and server are disabled because OpenWrt provides time
+- Firewall zone commands no longer add a duplicate `br-pihole-out` entry when run twice
+
 ### Planned
 
-- Add a graphical network topology diagram
 - Add optional IPv6 Docker bridge instructions
 - Add optional Unbound integration
-- Add upgrade and rollback guidance
 - Test additional OpenWrt releases and hardware platforms
 
 ## [0.1.0] - 2026-08-01

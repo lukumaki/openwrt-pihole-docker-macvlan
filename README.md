@@ -14,6 +14,23 @@ The result is a Pi-hole container that behaves like a separate device on the LAN
 > [!NOTE]
 > This guide was built from a real OpenWrt deployment and documents both the working configuration and the problems encountered along the way.
 
+## Relationship to the official Pi-hole Docker guide
+
+The Compose file follows the official guide at <https://docs.pi-hole.net/docker/>:
+
+| Official guide | This project |
+|---|---|
+| `pihole/pihole:latest` | Same, with an optional `PIHOLE_TAG` for pinning or rollback |
+| `/etc/pihole` volume | Same, stored at `/opt/pihole/etc-pihole` |
+| `TZ`, `FTLCONF_webserver_api_password`, `FTLCONF_dns_upstreams` | Same, read from `.env` |
+| `FTLCONF_dns_listeningMode: 'ALL'` | Set explicitly, `LOCAL` by default because clients reach Pi-hole directly through macvlan |
+| `restart: unless-stopped` | Same |
+| Published ports 53, 80 and 443 | Not needed: Pi-hole owns its own LAN address |
+| `NET_ADMIN`, `SYS_TIME`, `SYS_NICE` | Only `SYS_NICE`: OpenWrt keeps DHCP and the clock |
+| Upgrade with `docker compose pull`, `down`, `up -d` | Same |
+
+The differences are explained in [Networking explained](docs/networking-explained.md) and [Installation](docs/installation.md).
+
 ## What this project covers
 
 - OpenWrt x86/64 as the main router
@@ -41,7 +58,7 @@ The reference deployment uses the following addresses:
 | DHCP pool | `192.168.1.111` to `192.168.1.160` |
 | Docker outbound bridge | `172.18.0.0/16` |
 | Docker bridge gateway | `172.18.0.1` |
-| Pi-hole bridge address | `172.18.0.2` |
+| Pi-hole bridge address | `172.18.0.2` (pinned in Compose) |
 | Upstream DNS | Quad9 |
 | Timezone | `Europe/Athens` |
 
@@ -184,18 +201,20 @@ Additional project files:
 
 The full instructions are in [docs/installation.md](docs/installation.md), but the deployment follows this order:
 
+0. If Docker is already running, record existing containers, networks and firewall zones first.
 1. Verify the OpenWrt LAN subnet, bridge name, and DHCP pool.
-2. Install Docker, Docker Compose, and macvlan support.
+2. Install or verify Docker, Docker Compose, and macvlan support (`apk` on OpenWrt 25.12+, `opkg` on older releases).
 3. Create persistent Pi-hole directories.
 4. Create `pihole_macvlan`.
 5. Create `pihole_outbound`.
-6. add `br-pihole-out` to the OpenWrt firewall.
+6. Add `br-pihole-out` to the OpenWrt firewall.
 7. Allow forwarding from the Docker zone to WAN.
 8. Copy and edit the example environment file.
 9. Install the Compose file.
 10. Start Pi-hole.
 11. Advertise `192.168.1.2` through DHCP option 6.
 12. Validate DNS, blocking, DNSSEC, and reboot persistence.
+13. Upgrade later with `docker compose pull`, `down`, and `up -d`.
 
 ## Security notes
 
