@@ -464,6 +464,14 @@ ip address show br-pihole-out
 
 ## 6. Add the outbound bridge to the OpenWrt firewall
 
+Save a copy of the current firewall settings first, so you can undo this step:
+
+```sh
+cp /etc/config/firewall /root/firewall.before-pihole
+```
+
+To undo later: `cp /root/firewall.before-pihole /etc/config/firewall && /etc/init.d/firewall restart`.
+
 Depending on the OpenWrt release and how Docker was installed, a `docker` firewall zone may already exist (on OpenWrt 25.12.6 with Docker 29.6.1 it did not). Inspect it first:
 
 ```sh
