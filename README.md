@@ -174,6 +174,8 @@ Docker 29 is new enough for `gw_priority`, so the default-route fix applies. Run
 ├── README.md
 ├── LICENSE
 ├── CHANGELOG.md
+├── AGENTS.md          (rules for AI coding agents)
+├── CLAUDE.md          (imports AGENTS.md for Claude Code)
 ├── compose
 │   ├── compose.yaml
 │   └── .env.example

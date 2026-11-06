@@ -29,6 +29,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- The project rules for AI coding agents moved from `CLAUDE.md` to `AGENTS.md`, so Codex, Cursor and Copilot read the same rules as Claude Code; `CLAUDE.md` now just imports `AGENTS.md`
 - The macvlan `--ip-range` is now `192.168.1.16/29`, because `192.168.1.200/29` lies inside OpenWrt's default DHCP pool (`.100` to `.249`)
 - `gw_priority: 1` on `pihole_outbound` keeps `172.18.0.1` as the default route on Docker Engine 28+, where the macvlan gateway was otherwise chosen
 - Pi-hole's bridge address is pinned to `172.18.0.2` through `PIHOLE_OUTBOUND_IP`
