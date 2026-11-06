@@ -478,7 +478,8 @@ uci set firewall.docker.name='docker'
 uci set firewall.docker.input='ACCEPT'
 uci set firewall.docker.output='ACCEPT'
 uci set firewall.docker.forward='ACCEPT'
-uci set firewall.docker.network='docker'
+uci -q del_list firewall.docker.network='docker'
+uci add_list firewall.docker.network='docker'
 uci -q del_list firewall.docker.device='br-pihole-out'
 uci add_list firewall.docker.device='br-pihole-out'
 ```
@@ -491,7 +492,19 @@ uci set firewall.pihole_docker_wan.src='docker'
 uci set firewall.pihole_docker_wan.dest='wan'
 ```
 
-Commit and restart the firewall:
+`network` and `device` are written as lists, the same way OpenWrt's `dockerd` start script writes them at boot, so the two never fight over the zone.
+
+What each line means:
+
+```text
+zone 'docker'                   a firewall group for Docker's bridges
+input/output/forward ACCEPT     the router trusts traffic from its own containers
+network 'docker'                Docker's default bridge docker0 (added by dockerd at boot)
+device 'br-pihole-out'          Pi-hole's outbound bridge from step 5
+forwarding docker -> wan        containers in this zone may reach the Internet
+```
+
+Commit and restart the firewall. Restarting takes a second and may briefly interrupt open connections:
 
 ```sh
 uci commit firewall
