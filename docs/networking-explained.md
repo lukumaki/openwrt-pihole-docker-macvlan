@@ -61,7 +61,7 @@ docker network create \
   --driver macvlan \
   --subnet 192.168.1.0/24 \
   --gateway 192.168.1.1 \
-  --ip-range 192.168.1.200/29 \
+  --ip-range 192.168.1.16/29 \
   --opt parent=br-lan \
   pihole_macvlan
 ```

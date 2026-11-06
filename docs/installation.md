@@ -1,6 +1,6 @@
 # Installation
 
-This guide assumes that OpenWrt x86/64 is already installed and working as the main router.
+This guide assumes that OpenWrt x86/64 is already installed and working as the main router. You do not need to be a programmer. Every command is explained, and most of the work is copying commands into an SSH session on the router.
 
 The reference deployment was built with:
 
@@ -16,43 +16,118 @@ The reference deployment was built with:
 > [!WARNING]
 > Do not copy the example addresses blindly.
 >
-> Check your own LAN subnet, DHCP range, bridge names, and unused addresses first.
+> Check your own LAN subnet, DHCP range, bridge names, and unused addresses first. The check script in section 0 does most of this for you.
 
 The Compose file follows the official Pi-hole Docker guide at <https://docs.pi-hole.net/docker/> (same image, `/etc/pihole` volume, `FTLCONF_*` variables and `restart: unless-stopped`). It differs only where macvlan requires it: no `ports:` section, two external networks, and no `NET_ADMIN` or `SYS_TIME` capabilities because Pi-hole does not run DHCP or set the router clock here.
 
-## 0. Reinstalling on a router where Docker is already running
+## How you work in this guide
 
-Skip this section on a fresh router.
-
-If Docker is already installed and running, start by recording what already exists so that nothing is overwritten by accident:
+You type commands on the router through SSH. From a Linux or macOS terminal, or from Windows PowerShell:
 
 ```sh
-docker version
-docker compose version
-docker ps -a
-docker network ls
-uci -q show firewall.docker
-uci -q show firewall.pihole_docker_wan
-ls -la /etc/docker/pihole /opt/pihole/etc-pihole 2>/dev/null
+ssh root@192.168.1.1
 ```
 
-Then decide, for each item, whether to keep or replace it:
+Three helper scripts in the `scripts` folder do the repetitive parts:
 
-| Item | Keep it when | Replace it when |
+| Script | What it does | Changes anything? |
 |---|---|---|
-| `pihole` container | never; it is recreated by Compose | always: `docker compose -f /etc/docker/pihole/compose.yaml down` or `docker rm -f pihole` |
-| `pihole_macvlan` network | `docker network inspect` shows the subnet, gateway and `parent` from step 4 | any value differs |
-| `pihole_outbound` network | it uses `172.18.0.0/16`, gateway `172.18.0.1` and bridge name `br-pihole-out` | any value differs |
-| `/opt/pihole/etc-pihole` | you want to keep lists, groups, clients and query history | you want a clean Pi-hole |
-| `/etc/docker/pihole/.env` | it still holds the right password and addresses | always compare it with the new `compose/.env.example` |
+| `check-starting-point.sh` | Checks packages, Docker, leftovers and address conflicts | No, it only reads |
+| `prepare-folders.sh` | Creates Pi-hole's two folders and copies the project files into them | Yes, creates folders and files |
+| `create-networks.sh` | Creates the two Docker networks, after checking for conflicts | Yes, creates Docker networks |
 
-If you have a backup made with `scripts/backup.sh`, take a fresh one now before changing anything.
+Every script can be run more than once. None of them deletes anything.
 
-To start Pi-hole with a clean configuration, move the old data aside instead of deleting it:
+### Copy the project to the router
+
+The router needs a copy of the `compose` and `scripts` folders. On your computer, inside the downloaded repository folder, run:
 
 ```sh
-mv /opt/pihole/etc-pihole /opt/pihole/etc-pihole.old-$(date +%Y%m%d)
+scp -O -r compose scripts root@192.168.1.1:/root/pihole-setup/
 ```
+
+`-O` makes `scp` use the classic copy method, which OpenWrt's small SSH server (Dropbear) understands without extra packages. If the target folder does not exist yet, create it first with `ssh root@192.168.1.1 mkdir -p /root/pihole-setup`.
+
+Then, on the router:
+
+```sh
+cd /root/pihole-setup
+ls
+```
+
+You should see `compose` and `scripts`.
+
+## 0. Make sure you start from a clean starting point
+
+### What "clean starting point" means
+
+A router is at a clean starting point when all of these are true:
+
+| Check | Why it matters |
+|---|---|
+| Docker and Docker Compose are installed and running | Pi-hole runs inside Docker |
+| `kmod-macvlan` is installed and loaded | Without it the macvlan network cannot be created |
+| No container called `pihole` exists | Compose would fail with "name already in use" |
+| No Docker networks called `pihole_macvlan` or `pihole_outbound` exist | They are created fresh in steps 4 and 5 |
+| No folders `/etc/docker/pihole` or `/opt/pihole/etc-pihole` exist | Old settings could be reused without you noticing |
+| No firewall forwarding `pihole_docker_wan` exists | It is created in step 6 |
+| `192.168.1.2` is not used by any device | Two devices with the same address break each other |
+| `172.18.0.0/16` is not used by another Docker network or route | Pi-hole's Internet bridge needs it |
+| The macvlan range is outside the DHCP pool | Otherwise Docker and DHCP could hand out the same address |
+
+Docker's own default network `bridge` (`172.17.0.0/16`) and its `docker0` interface are normal and can stay. They do not overlap with `172.18.0.0/16`.
+
+A `docker` firewall zone may or may not exist. OpenWrt's `dockerd` service creates it at boot. Both cases are fine, because step 6 creates or updates it.
+
+### Check it with the script
+
+On the router:
+
+```sh
+sh scripts/check-starting-point.sh
+```
+
+The script only reads. Each line starts with one of these labels:
+
+| Label | Meaning |
+|---|---|
+| `[ OK ]` | Good, nothing to do |
+| `[ INFO ]` | Information only |
+| `[MISSING]` | Something needed is not installed or not running. See step 2 |
+| `[EXISTS]` | A leftover from an earlier Pi-hole installation. See below |
+| `[CONFLICT]` | An address or name clash. Fix it before continuing |
+
+If your network differs from this guide, open the script and change the values at the top first (`LAN_BRIDGE`, `PIHOLE_IP`, `MACVLAN_RANGE`, `OUTBOUND_SUBNET`).
+
+The last section tells you the result. On a clean router it says:
+
+```text
+== Result
+  Clean starting point: Docker works, nothing from Pi-hole exists yet,
+  and the planned addresses are free. Continue with installation step 3.
+```
+
+### Getting back to a clean starting point
+
+If the script reports `[EXISTS]` lines, an earlier Pi-hole installation is still there. Take a backup first if you want to keep anything:
+
+```sh
+sh scripts/backup.sh /root
+```
+
+Then decide, for each item, whether to keep or remove it:
+
+| Item | Keep it when | To remove it |
+|---|---|---|
+| `pihole` container | never; Compose recreates it | `docker rm -f pihole` |
+| `pihole_macvlan` network | its subnet, gateway and `parent` match step 4 | `docker network rm pihole_macvlan` |
+| `pihole_outbound` network | it uses `172.18.0.0/16`, gateway `172.18.0.1`, bridge `br-pihole-out` | `docker network rm pihole_outbound` |
+| `/opt/pihole/etc-pihole` | you want to keep lists, groups, clients and query history | `mv /opt/pihole/etc-pihole /opt/pihole/etc-pihole.old-$(date +%Y%m%d)` |
+| `/etc/docker/pihole` | it still holds the right password and addresses | `mv /etc/docker/pihole /etc/docker/pihole.old-$(date +%Y%m%d)` |
+
+Remove the container before its networks; Docker refuses to remove a network that a container still uses. Folders are renamed instead of deleted, so you can go back.
+
+Run the check script again until it reports a clean starting point, or only the leftovers you decided to keep.
 
 > [!NOTE]
 > Settings passed as `FTLCONF_*` environment variables always win over values stored in `/opt/pihole/etc-pihole/pihole.toml`, and they are read-only in the web interface. Reusing old data is therefore safe: the password, upstreams and listening mode come from the new `.env` file.
@@ -61,18 +136,22 @@ mv /opt/pihole/etc-pihole /opt/pihole/etc-pihole.old-$(date +%Y%m%d)
 
 ## 1. Confirm the OpenWrt network layout
 
-Run:
+Before creating anything, write down four facts about your network. The check script prints most of them; these commands show them directly.
+
+Show the router's addresses and routes:
 
 ```sh
 ip address
 ip route
 ```
 
-Confirm the LAN bridge name:
+Show the LAN settings:
 
 ```sh
 uci show network.lan
 ```
+
+Look for `network.lan.device` (the LAN bridge, usually `br-lan`) and `network.lan.ipaddr` (the router's LAN address, usually `192.168.1.1/24`).
 
 The reference installation uses:
 
@@ -82,36 +161,89 @@ LAN address: 192.168.1.1/24
 LAN subnet: 192.168.1.0/24
 ```
 
-Check the DHCP range:
+Show the DHCP pool, the range of addresses OpenWrt hands out automatically:
 
 ```sh
 uci show dhcp.lan
 ```
 
-The reference DHCP range is:
+The pool is described by two numbers:
 
 ```text
-192.168.1.111 to 192.168.1.160
+dhcp.lan.start='100'   first address: 192.168.1.100
+dhcp.lan.limit='150'   number of addresses: 150, so the last one is 192.168.1.249
 ```
 
-Pi-hole uses `192.168.1.2`, which is outside that pool.
+These are OpenWrt's defaults. The last address is `start + limit - 1`.
 
-## 2. Install or verify the Docker packages
+Every fixed address in this guide must be outside the pool:
 
-If Docker is already running, only check that the required packages are present and skip the install command.
+| Address | Used for | Outside the default pool `.100` to `.249`? |
+|---|---|---|
+| `192.168.1.2` | Pi-hole | Yes |
+| `192.168.1.16` to `192.168.1.23` | Spare macvlan range (step 4) | Yes |
 
-OpenWrt 25.12 and newer use the `apk` package manager. OpenWrt 24.10 and older use `opkg`. Check which one your router has:
+> [!NOTE]
+> The original reference router used a smaller pool (`.111` to `.160`) and the macvlan range `192.168.1.200/29`. With OpenWrt's default pool, `.200` to `.207` would be inside the pool, so this guide now uses `192.168.1.16/29`.
+
+## 2. Install or verify the dependencies
+
+### What needs to be installed, and why
+
+Pi-hole itself needs **nothing** installed on OpenWrt. Everything Pi-hole uses (its DNS server, web interface and databases) is inside the Docker image `pihole/pihole`, which Docker downloads in step 10.
+
+What OpenWrt needs is Docker and macvlan support:
+
+| Package | What it is | Required? |
+|---|---|---|
+| `dockerd` | The Docker service (engine) that runs containers, with its start script `/etc/init.d/dockerd` | Yes |
+| `docker` | The `docker` command you type | Yes |
+| `docker-compose` | The `docker compose` command that reads `compose.yaml` | Yes |
+| `kmod-macvlan` | Kernel module that lets a container have its own LAN address | Yes |
+| `luci-app-dockerman` | A Docker page in the LuCI web interface | No, optional |
+
+When you install `dockerd`, the package manager automatically installs what Docker itself depends on. You do not install these yourself:
+
+| Installed automatically | Why Docker needs it |
+|---|---|
+| `containerd` | Runs the containers underneath Docker |
+| `tini` | Small helper that starts each container's main process |
+| `iptables`, `iptables-mod-extra`, `kmod-ipt-nat`, `kmod-ipt-physdev` | Firewall and address-translation rules Docker creates for its networks |
+| `kmod-veth` | Virtual network cables between containers and bridges |
+| `kmod-nf-ipvs` | Kernel support for Docker's internal load balancing |
+| `ca-certificates` | Lets Docker trust HTTPS when downloading images |
+| `uci-firewall` | Lets the `dockerd` start script add its `docker` firewall zone |
+
+To see the full list on your router:
+
+```sh
+apk info -R dockerd    # OpenWrt 25.12 and newer
+opkg info dockerd      # OpenWrt 24.10 and older
+```
+
+Docker also needs disk space. It stores images under `/opt/docker` (the `data_root` in `/etc/config/dockerd`). The Pi-hole image needs roughly 100 MB, and Pi-hole's data grows with query history. Check free space:
+
+```sh
+df -h /opt
+```
+
+### Which package manager does your router use?
+
+OpenWrt 25.12 and newer use `apk`. OpenWrt 24.10 and older use `opkg`. Check:
 
 ```sh
 command -v apk || command -v opkg
 ```
+
+### Install
+
+If the check script showed no `[MISSING]` lines, skip to "Start Docker" below.
 
 On OpenWrt 25.12 and newer:
 
 ```sh
 apk update
 apk add docker dockerd docker-compose luci-app-dockerman kmod-macvlan
-apk info | grep -E 'docker|compose|macvlan'
 ```
 
 On OpenWrt 24.10 and older:
@@ -124,22 +256,28 @@ opkg install \
   docker-compose \
   luci-app-dockerman \
   kmod-macvlan
-opkg list-installed | grep -E 'docker|dockerd|compose|macvlan'
 ```
 
-Package names can vary between OpenWrt releases. `dockerd` provides the `/etc/init.d/dockerd` service, and `kmod-macvlan` is required for the macvlan network.
+Leave out `luci-app-dockerman` if you do not want the web page.
+
+Package names can vary between OpenWrt releases. If a name is not found, search for it with `apk search docker` or `opkg list | grep docker`.
+
+> [!NOTE]
+> The `dockerd` configuration file `/etc/config/dockerd` warns that Docker's firewall rules work best with the older `firewall`/`iptables-legacy` packages instead of OpenWrt's default `firewall4`/`iptables-nft`. This guide has worked with the defaults, so do not swap firewall packages unless you see Docker networking errors.
+
+### Start Docker
+
+Make Docker start at every boot, and start it now:
+
+```sh
+/etc/init.d/dockerd enable
+/etc/init.d/dockerd start
+```
 
 Confirm that the macvlan module is loaded:
 
 ```sh
 lsmod | grep macvlan
-```
-
-Enable and start Docker:
-
-```sh
-/etc/init.d/dockerd enable
-/etc/init.d/dockerd start
 ```
 
 Verify:
@@ -151,28 +289,50 @@ docker compose version
 
 `docker compose` (Compose v2, with a space) is used throughout this guide, as in the official Pi-hole guide.
 
-## 3. Create persistent directories
+Run `sh scripts/check-starting-point.sh` again. It should now show no `[MISSING]` lines.
 
-Create the Compose project directory:
+## 3. Create Pi-hole's folders
+
+### Why Pi-hole needs folders on the router
+
+A container is disposable: every upgrade throws the old one away and starts a new one. Anything stored only inside the container is lost. Pi-hole's settings and lists must therefore live in folders on the router, which the container mounts.
+
+This guide uses two folders:
+
+| Folder on the router | What it holds | Seen inside the container as |
+|---|---|---|
+| `/etc/docker/pihole` | `compose.yaml` (how to run Pi-hole) and `.env` (your password and addresses) | not mounted |
+| `/opt/pihole/etc-pihole` | Pi-hole's own data: `pihole.toml`, blocklists, query database | `/etc/pihole` |
+
+The Compose project is kept under `/etc` so that it can be included in normal OpenWrt configuration backups. Pi-hole's growing data is kept under `/opt`, next to Docker's own data.
+
+The folders must exist before Pi-hole starts. Otherwise Docker creates an empty folder itself, owned by the wrong settings, and the mistake is hard to spot.
+
+### Create them with the script
+
+On the router, inside `/root/pihole-setup`:
 
 ```sh
-mkdir -p /etc/docker/pihole
+sh scripts/prepare-folders.sh
 ```
 
-Create Pi-hole's persistent configuration directory:
+The script:
+
+1. creates `/etc/docker/pihole` and `/opt/pihole/etc-pihole`
+2. makes `root` the owner and makes `/etc/docker/pihole` readable only by `root`, because `.env` contains your password
+3. copies `compose/compose.yaml` to `/etc/docker/pihole/compose.yaml`
+4. copies `compose/.env.example` to `/etc/docker/pihole/.env` and allows only `root` to read it
+5. never overwrites an existing `compose.yaml` or `.env`
+
+### Or create them by hand
 
 ```sh
-mkdir -p /opt/pihole/etc-pihole
+mkdir -p /etc/docker/pihole /opt/pihole/etc-pihole
+chown root:root /etc/docker/pihole /opt/pihole /opt/pihole/etc-pihole
+chmod 700 /etc/docker/pihole
 ```
 
-Set ownership:
-
-```sh
-chown -R root:root /etc/docker/pihole
-chown -R root:root /opt/pihole
-```
-
-The reference layout is:
+### Result
 
 ```text
 /etc/docker/pihole/
@@ -180,49 +340,77 @@ The reference layout is:
 └── .env
 
 /opt/pihole/
-└── etc-pihole/
+└── etc-pihole/      (empty until Pi-hole starts)
 ```
-
-The Compose project is kept under `/etc` so that it can be included in normal OpenWrt configuration backups.
-
-Pi-hole runtime data is kept under `/opt`.
 
 ## 4. Create the macvlan network
 
-The macvlan network gives Pi-hole its own address on the physical LAN.
+### What macvlan does, in plain words
 
-If it already exists from a previous installation, inspect it and keep it when it matches the values below:
+Normally a Docker container hides behind the router's own address, like a program running on the router. Clients would have to send DNS to `192.168.1.1`, where OpenWrt's own DNS server (dnsmasq) already listens.
 
-```sh
-docker network inspect pihole_macvlan
+A **macvlan** network gives the container its own network card on the LAN, with its own MAC address and its own IP address. To every phone and laptop, Pi-hole at `192.168.1.2` looks like a separate small device plugged into your switch, even though it runs inside the router.
+
+```text
+            your LAN (br-lan, 192.168.1.0/24)
+   +-------------+--------------+----------------+
+   |             |              |                |
+OpenWrt       laptop          phone          Pi-hole
+192.168.1.1   (DHCP)          (DHCP)         192.168.1.2
+                                         (macvlan, inside Docker)
 ```
 
-Otherwise create it with:
+One side effect: by design, a macvlan container cannot talk to its own host. Pi-hole cannot reach `192.168.1.1` over macvlan, and the router cannot reach `192.168.1.2`. That is why step 5 adds a second network for Pi-hole's Internet traffic.
+
+### The settings
+
+| Setting | Value | Meaning |
+|---|---|---|
+| `--driver macvlan` | | Network type |
+| `--subnet` | `192.168.1.0/24` | Your LAN, the same as OpenWrt's |
+| `--gateway` | `192.168.1.1` | The router's LAN address |
+| `--opt parent` | `br-lan` | The LAN bridge the containers attach to |
+| `--ip-range` | `192.168.1.16/29` | A spare block of 8 addresses (`.16` to `.23`) |
+| name | `pihole_macvlan` | The name `compose.yaml` refers to |
+
+Pi-hole does not take its address from `--ip-range`. It always gets its fixed address `192.168.1.2` from `PIHOLE_IP` in `.env`. The `--ip-range` only limits which addresses Docker may pick by itself for other containers on this network. It is there as a safety net, so it must also be outside the DHCP pool and must not contain `192.168.1.2`.
+
+### Create it with the script
+
+The script creates both networks (this step and step 5). It stops with an error if the range overlaps the DHCP pool, and keeps a network that already exists with the right settings.
+
+Check the values at the top of `scripts/create-networks.sh` first:
+
+```sh
+head -25 scripts/create-networks.sh
+```
+
+Then run:
+
+```sh
+sh scripts/create-networks.sh
+```
+
+Expected output:
+
+```text
+pihole_macvlan: driver=macvlan subnet=192.168.1.0/24 gateway=192.168.1.1 parent=br-lan bridge=
+pihole_outbound: driver=bridge subnet=172.18.0.0/16 gateway=172.18.0.1 parent= bridge=br-pihole-out
+```
+
+If you used the script, read step 5 for the explanation and continue with step 6.
+
+### Or create it by hand
 
 ```sh
 docker network create \
   --driver macvlan \
   --subnet 192.168.1.0/24 \
   --gateway 192.168.1.1 \
-  --ip-range 192.168.1.200/29 \
+  --ip-range 192.168.1.16/29 \
   --opt parent=br-lan \
   pihole_macvlan
 ```
-
-Explanation:
-
-```text
---subnet       LAN subnet
---gateway      OpenWrt LAN address
---ip-range     Address pool reserved for Docker macvlan containers
---opt parent   OpenWrt LAN bridge
-```
-
-The static Pi-hole address `192.168.1.2` does not need to be inside the Docker `--ip-range`.
-
-The `--ip-range` controls addresses that Docker allocates automatically.
-
-Pi-hole receives its fixed address explicitly through Compose.
 
 Verify the network:
 
@@ -246,7 +434,7 @@ ip route
 
 If `172.18.0.0/16` is used by anything other than an existing, correct `pihole_outbound`, pick another private subnet and use it consistently in the command below, in `PIHOLE_OUTBOUND_IP`, and in the firewall checks.
 
-Create the network with:
+If you ran `scripts/create-networks.sh` in step 4, this network already exists. Otherwise create it with:
 
 ```sh
 docker network create \
@@ -340,7 +528,15 @@ firewall.pihole_docker_wan.dest='wan'
 
 ## 7. Create the Pi-hole environment file
 
-Copy the example environment file:
+If you used `scripts/prepare-folders.sh` in step 3, `/etc/docker/pihole/.env` already exists. Open it and change the password:
+
+```sh
+vi /etc/docker/pihole/.env
+```
+
+In `vi`, press `i` to type, `Esc` to stop typing, then `:wq` and `Enter` to save and quit.
+
+Otherwise copy the example environment file:
 
 ```sh
 cp compose/.env.example /etc/docker/pihole/.env
@@ -378,7 +574,7 @@ chmod 600 /etc/docker/pihole/.env
 
 ## 8. Install the Compose file
 
-Copy the repository Compose file:
+If you used `scripts/prepare-folders.sh` in step 3, this file is already in place. Otherwise copy the repository Compose file:
 
 ```sh
 cp compose/compose.yaml /etc/docker/pihole/compose.yaml

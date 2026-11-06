@@ -58,7 +58,8 @@ The reference deployment uses the following addresses:
 | OpenWrt LAN | `192.168.1.1/24` |
 | Pi-hole | `192.168.1.2` |
 | LAN subnet | `192.168.1.0/24` |
-| DHCP pool | `192.168.1.111` to `192.168.1.160` |
+| DHCP pool | `192.168.1.100` to `192.168.1.249` (OpenWrt default) |
+| macvlan spare range | `192.168.1.16/29` (`.16` to `.23`), outside the DHCP pool |
 | Docker outbound bridge | `172.18.0.0/16` |
 | Docker bridge gateway | `172.18.0.1` |
 | Pi-hole bridge address | `172.18.0.2` (pinned in Compose) |
@@ -182,6 +183,9 @@ Docker 29 is new enough for `gw_priority`, so the default-route fix applies. Run
 ├── images
 │   └── network-topology.png
 └── scripts
+    ├── check-starting-point.sh
+    ├── prepare-folders.sh
+    ├── create-networks.sh
     ├── backup.sh
     └── restore.sh
 ```
@@ -216,6 +220,9 @@ Additional project files:
 
 - [Example Compose configuration](compose/compose.yaml)
 - [Example environment file](compose/.env.example)
+- [Starting-point check script](scripts/check-starting-point.sh) (read-only)
+- [Folder preparation script](scripts/prepare-folders.sh)
+- [Network creation script](scripts/create-networks.sh)
 - [Backup script](scripts/backup.sh)
 - [Restore script](scripts/restore.sh)
 - [Changelog](CHANGELOG.md)
@@ -225,12 +232,12 @@ Additional project files:
 
 The full instructions are in [docs/installation.md](docs/installation.md), but the deployment follows this order:
 
-0. If Docker is already running, record existing containers, networks and firewall zones first.
+0. Copy the project to the router and run `scripts/check-starting-point.sh` to confirm a clean starting point.
 1. Verify the OpenWrt LAN subnet, bridge name, and DHCP pool.
 2. Install or verify Docker, Docker Compose, and macvlan support (`apk` on OpenWrt 25.12+, `opkg` on older releases).
-3. Create persistent Pi-hole directories.
-4. Create `pihole_macvlan`.
-5. Create `pihole_outbound`.
+3. Create Pi-hole's folders with `scripts/prepare-folders.sh`.
+4. Create `pihole_macvlan` and
+5. `pihole_outbound`, both with `scripts/create-networks.sh`.
 6. Add `br-pihole-out` to the OpenWrt firewall.
 7. Allow forwarding from the Docker zone to WAN.
 8. Copy and edit the example environment file.

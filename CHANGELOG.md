@@ -18,9 +18,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `SYS_NICE` capability, as in the official example
 - Troubleshooting for clients on other subnets and for the default gateway
 - Pi-hole image and version details in the backup diagnostics
+- `scripts/check-starting-point.sh`: read-only check for a clean starting point
+- `scripts/prepare-folders.sh`: creates Pi-hole's folders and copies the project files
+- `scripts/create-networks.sh`: creates both Docker networks after checking for conflicts
+- Beginner explanations of the clean starting point, the OpenWrt dependencies, Pi-hole's folders and the macvlan network
+- Instructions for copying the project to the router with `scp -O`
 
 ### Changed
 
+- The macvlan `--ip-range` is now `192.168.1.16/29`, because `192.168.1.200/29` lies inside OpenWrt's default DHCP pool (`.100` to `.249`)
 - `gw_priority: 1` on `pihole_outbound` keeps `172.18.0.1` as the default route on Docker Engine 28+, where the macvlan gateway was otherwise chosen
 - Pi-hole's bridge address is pinned to `172.18.0.2` through `PIHOLE_OUTBOUND_IP`
 - `FTLCONF_dns_listeningMode` is set explicitly, `LOCAL` by default, through `DNS_LISTENING_MODE`
