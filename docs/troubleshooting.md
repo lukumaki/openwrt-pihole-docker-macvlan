@@ -409,13 +409,13 @@ The server should be:
 Query Pi-hole directly:
 
 ```sh
-nslookup doubleclick.net 192.168.1.2
+nslookup googleads.g.doubleclick.net 192.168.1.2
 ```
 
 Check whether the domain appears in Pi-hole:
 
 ```sh
-docker exec pihole pihole -q doubleclick.net
+docker exec pihole pihole -q googleads.g.doubleclick.net
 ```
 
 Update Gravity:
@@ -1204,7 +1204,7 @@ Then test from a client:
 
 ```sh
 nslookup example.com
-nslookup doubleclick.net
+nslookup googleads.g.doubleclick.net
 ```
 
 This sequence moves from the container outward and avoids guesswork.

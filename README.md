@@ -155,7 +155,7 @@ The reference deployment passed the checks below with the original Compose file 
 - OpenWrt package management continues working
 - Clients connected through an OpenWrt dumb AP use Pi-hole normally
 
-The current Compose file and scripts (unreleased changes in the [Changelog](CHANGELOG.md)) were installed from a clean starting point on a real router on 2026-11-06, following installation steps 0 to 15. Pi-hole became healthy, its default route used `172.18.0.1`, blocking worked from a LAN client over IPv4 and IPv6, and the client received only `192.168.1.2` as DNS. The reboot test (step 17) is still to be run. The router runs:
+The current Compose file and scripts (unreleased changes in the [Changelog](CHANGELOG.md)) were installed from a clean starting point on a real router on 2026-11-06, following installation steps 0 to 17. Pi-hole became healthy, its default route used `172.18.0.1`, blocking worked from a LAN client over IPv4 and IPv6, the client received only `192.168.1.2` as DNS, conditional forwarding showed device names, and everything came back by itself after a full router reboot. The router runs:
 
 | Component | Version |
 |---|---|

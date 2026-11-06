@@ -36,6 +36,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Pi-hole's NTP client and server are disabled because OpenWrt provides time
 - Firewall zone commands no longer add a duplicate `br-pihole-out` entry when run twice
 
+- Blocking tests use `googleads.g.doubleclick.net` instead of `doubleclick.net`, which some blocklists deliberately allow
+
 ### Planned
 
 - Add optional IPv6 Docker bridge instructions

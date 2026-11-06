@@ -426,7 +426,7 @@ Expected DNS server:
 Test blocking:
 
 ```sh
-nslookup doubleclick.net
+nslookup googleads.g.doubleclick.net
 ```
 
 A blocked response commonly appears as:
@@ -561,7 +561,7 @@ Test from a connected client:
 
 ```sh
 nslookup example.com
-nslookup doubleclick.net
+nslookup googleads.g.doubleclick.net
 ```
 
 ## 18. Recovery notes

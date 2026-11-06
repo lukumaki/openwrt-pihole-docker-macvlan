@@ -984,7 +984,7 @@ The DNS server should be:
 Test blocking:
 
 ```sh
-nslookup doubleclick.net
+nslookup googleads.g.doubleclick.net
 ```
 
 A blocked result commonly appears as:
@@ -1015,7 +1015,7 @@ Then test from a LAN client:
 
 ```sh
 nslookup example.com
-nslookup doubleclick.net
+nslookup googleads.g.doubleclick.net
 ```
 
 A successful reboot test confirms that:

@@ -353,16 +353,21 @@ appears.
 Run:
 
 ```sh
-nslookup doubleclick.net
+nslookup googleads.g.doubleclick.net
 ```
 
 A blocked result commonly looks like:
 
 ```text
-Name: doubleclick.net
+Name: googleads.g.doubleclick.net
 Address: 0.0.0.0
 Address: ::
 ```
+
+> [!NOTE]
+> Which names are blocked depends on your blocklists. This guide tests `googleads.g.doubleclick.net`, an ad-serving name that both Pi-hole's default list and common larger lists (such as HaGeZi) block. The bare `doubleclick.net` is a poor test: some lists deliberately allow it so that shopping and ad-click links keep working.
+>
+> To see why a name is or is not blocked: `docker exec pihole pihole -q googleads.g.doubleclick.net`
 
 This confirms that:
 
@@ -385,7 +390,7 @@ nslookup example.com 192.168.1.2
 Then:
 
 ```sh
-nslookup doubleclick.net 192.168.1.2
+nslookup googleads.g.doubleclick.net 192.168.1.2
 ```
 
 These tests bypass the client's current DNS settings and query Pi-hole directly.
@@ -493,7 +498,7 @@ From a LAN client:
 
 ```sh
 nslookup example.com
-nslookup doubleclick.net
+nslookup googleads.g.doubleclick.net
 ```
 
 Expected:
@@ -535,7 +540,7 @@ The main OpenWrt router as the gateway
 Then test blocking:
 
 ```sh
-nslookup doubleclick.net
+nslookup googleads.g.doubleclick.net
 ```
 
 The result should be the same as for a client connected directly to the main router.
