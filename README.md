@@ -153,7 +153,15 @@ The reference deployment passed the checks below with the original Compose file 
 - OpenWrt package management continues working
 - Clients connected through an OpenWrt dumb AP use Pi-hole normally
 
-The current Compose file (unreleased changes in the [Changelog](CHANGELOG.md)) has been tested with Docker Engine 29 and the current `pihole/pihole:latest` image, but not yet on a real OpenWrt router. Run [Testing and validation](docs/testing.md) after installing.
+The current Compose file (unreleased changes in the [Changelog](CHANGELOG.md)) has been tested with Docker Engine 29 and the current `pihole/pihole:latest` image, but not yet on a real OpenWrt router. The router it is being reinstalled on runs:
+
+| Component | Version |
+|---|---|
+| OpenWrt | 25.12.6 (r33311), x86/64, `apk` package manager |
+| Docker Engine | 29.6.1 |
+| Docker Compose | v5.1.4 |
+
+Docker 29 is new enough for `gw_priority`, so the default-route fix applies. Run [Testing and validation](docs/testing.md) after installing.
 
 ## Repository layout
 

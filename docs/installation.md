@@ -276,7 +276,7 @@ ip address show br-pihole-out
 
 ## 6. Add the outbound bridge to the OpenWrt firewall
 
-The OpenWrt `dockerd` package normally creates a `docker` firewall zone already. Inspect it first:
+Depending on the OpenWrt release and how Docker was installed, a `docker` firewall zone may already exist (on OpenWrt 25.12.6 with Docker 29.6.1 it did not). Inspect it first:
 
 ```sh
 uci -q show firewall.docker
