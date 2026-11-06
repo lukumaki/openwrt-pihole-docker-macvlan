@@ -1,6 +1,14 @@
+# Pi-hole v6 on OpenWrt x86/64 with macvlan and a dedicated outbound bridge.
+# Based on the official quick-start: https://docs.pi-hole.net/docker/
+#
+# Differences from the official example are deliberate:
+# - no "ports:" section, because macvlan gives Pi-hole its own LAN address
+# - two external networks instead of the default bridge
+# - NET_ADMIN and SYS_TIME are not added (no Pi-hole DHCP, OpenWrt keeps the clock)
+
 services:
   pihole:
-    image: pihole/pihole:latest
+    image: "pihole/pihole:${PIHOLE_TAG:-latest}"
     container_name: pihole
     hostname: pihole
     restart: unless-stopped
@@ -10,11 +18,39 @@ services:
       FTLCONF_webserver_api_password: "${PIHOLE_PASSWORD}"
       FTLCONF_dns_upstreams: "${DNS_UPSTREAMS}"
 
+      # LOCAL answers clients on directly attached subnets (the LAN through
+      # macvlan). Use ALL only if clients on other routed OpenWrt subnets
+      # (guest VLAN, VPN) must use Pi-hole. See docs/networking-explained.md.
+      FTLCONF_dns_listeningMode: "${DNS_LISTENING_MODE:-LOCAL}"
+
+      # Conditional forwarding: ask OpenWrt for device names, so Pi-hole shows
+      # "laptop.lan" instead of "192.168.1.123". Uses 172.18.0.1 because macvlan
+      # cannot reach the router at 192.168.1.1. See docs/installation.md step 15.
+      FTLCONF_dns_revServers: "${REV_SERVERS:-true,192.168.1.0/24,172.18.0.1,lan}"
+
+      # OpenWrt already synchronizes the router clock and offers NTP.
+      # Without SYS_TIME, Pi-hole's NTP client cannot set the time anyway.
+      FTLCONF_ntp_sync_active: "false"
+      FTLCONF_ntp_ipv4_active: "false"
+      FTLCONF_ntp_ipv6_active: "false"
+
     volumes:
+      # Persists Pi-hole's databases and pihole.toml between container upgrades.
       - /opt/pihole/etc-pihole:/etc/pihole
+
+    cap_add:
+      # Optional (official example): gives FTL more processing time under load.
+      - SYS_NICE
+      # Only needed if Pi-hole becomes the DHCP server. Not used in this guide.
+      # - NET_ADMIN
 
     networks:
       pihole_outbound:
+        ipv4_address: "${PIHOLE_OUTBOUND_IP:-172.18.0.2}"
+        # Makes 172.18.0.1 the default route (Docker Engine 28+ / Compose 2.33+).
+        # Without it, recent Docker versions may pick the macvlan gateway.
+        # Older versions silently ignore this line.
+        gw_priority: 1
       pihole_macvlan:
         ipv4_address: "${PIHOLE_IP}"
 

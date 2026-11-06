@@ -62,6 +62,13 @@ docker network inspect pihole_outbound \
 docker inspect pihole \
     > "${WORK_DIR}/diagnostics/pihole-container.json" 2>&1 || true
 
+docker image inspect "$(docker inspect pihole --format '{{.Config.Image}}' 2>/dev/null)" \
+    --format '{{.Id}} {{join .RepoDigests " "}}' \
+    > "${WORK_DIR}/diagnostics/pihole-image.txt" 2>&1 || true
+
+docker exec pihole pihole -v \
+    > "${WORK_DIR}/diagnostics/pihole-version.txt" 2>&1 || true
+
 docker exec pihole ip address \
     > "${WORK_DIR}/diagnostics/pihole-ip-address.txt" 2>&1 || true
 
@@ -90,7 +97,8 @@ Included:
 Important:
 - The Compose .env file may contain the Pi-hole web password.
 - Store this archive securely.
-- Docker images are not included.
+- Docker images are not included. The image tag and digest are recorded
+  in diagnostics/pihole-image.txt so the same release can be pulled again.
 - Review UCI exports before applying them to another router.
 INFO
 

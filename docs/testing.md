@@ -211,6 +211,20 @@ The exact formatting may vary.
 
 The important part is that only the intended upstream resolvers are listed.
 
+Also confirm the listening mode and that Pi-hole's NTP client is off:
+
+```sh
+docker exec pihole pihole-FTL --config dns.listeningMode
+docker exec pihole pihole-FTL --config ntp.sync.active
+```
+
+Expected with the reference `.env`:
+
+```text
+LOCAL
+false
+```
+
 ## 7. Verify OpenWrt's own Internet connection
 
 Test raw Internet access from OpenWrt:
@@ -240,7 +254,8 @@ rm -f /tmp/openwrt-test.html
 Test package index access:
 
 ```sh
-opkg update
+apk update    # OpenWrt 25.12 and newer
+opkg update   # OpenWrt 24.10 and older
 ```
 
 If raw IP connectivity works but hostname resolution fails, inspect:
@@ -338,16 +353,21 @@ appears.
 Run:
 
 ```sh
-nslookup doubleclick.net
+nslookup googleads.g.doubleclick.net
 ```
 
 A blocked result commonly looks like:
 
 ```text
-Name: doubleclick.net
+Name: googleads.g.doubleclick.net
 Address: 0.0.0.0
 Address: ::
 ```
+
+> [!NOTE]
+> Which names are blocked depends on your blocklists. This guide tests `googleads.g.doubleclick.net`, an ad-serving name that both Pi-hole's default list and common larger lists (such as HaGeZi) block. The bare `doubleclick.net` is a poor test: some lists deliberately allow it so that shopping and ad-click links keep working.
+>
+> To see why a name is or is not blocked: `docker exec pihole pihole -q googleads.g.doubleclick.net`
 
 This confirms that:
 
@@ -370,7 +390,7 @@ nslookup example.com 192.168.1.2
 Then:
 
 ```sh
-nslookup doubleclick.net 192.168.1.2
+nslookup googleads.g.doubleclick.net 192.168.1.2
 ```
 
 These tests bypass the client's current DNS settings and query Pi-hole directly.
@@ -478,7 +498,7 @@ From a LAN client:
 
 ```sh
 nslookup example.com
-nslookup doubleclick.net
+nslookup googleads.g.doubleclick.net
 ```
 
 Expected:
@@ -520,7 +540,7 @@ The main OpenWrt router as the gateway
 Then test blocking:
 
 ```sh
-nslookup doubleclick.net
+nslookup googleads.g.doubleclick.net
 ```
 
 The result should be the same as for a client connected directly to the main router.
@@ -549,9 +569,11 @@ A complete installation should pass all of these checks:
 - [ ] Pi-hole reaches Quad9
 - [ ] Gravity downloads successfully
 - [ ] OpenWrt resolves hostnames
-- [ ] `opkg update` works
+- [ ] `apk update` (or `opkg update` on older releases) works
 - [ ] DHCP advertises `192.168.1.2`
+- [ ] The router does not announce itself as IPv6 DNS (`dhcp.lan.dns_service='0'`)
 - [ ] Clients report Pi-hole as their DNS server
+- [ ] Pi-hole shows device names (conditional forwarding works)
 - [ ] Normal domains resolve
 - [ ] Blocked domains return a blocking response
 - [ ] The Pi-hole dashboard is reachable

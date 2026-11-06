@@ -61,7 +61,7 @@ docker network create \
   --driver macvlan \
   --subnet 192.168.1.0/24 \
   --gateway 192.168.1.1 \
-  --ip-range 192.168.1.200/29 \
+  --ip-range 192.168.1.16/29 \
   --opt parent=br-lan \
   pihole_macvlan
 ```
@@ -111,8 +111,10 @@ Docker network: pihole_outbound
 Linux bridge:   br-pihole-out
 Subnet:         172.18.0.0/16
 Gateway:        172.18.0.1
-Pi-hole IP:     172.18.0.2
+Pi-hole IP:     172.18.0.2 (pinned)
 ```
+
+Pi-hole's bridge address is pinned in Compose through `PIHOLE_OUTBOUND_IP`, so it stays `172.18.0.2` across restarts, upgrades and reboots instead of depending on Docker's automatic allocation.
 
 It is created with:
 
@@ -217,6 +219,8 @@ default via 172.18.0.1 dev eth0
 ```
 
 The interface names may be reversed.
+
+The default route comes from `pihole_outbound` because `compose.yaml` gives that network `gw_priority: 1`. Without it, recent Docker versions can choose the macvlan gateway `192.168.1.1` instead, which breaks outbound traffic.
 
 The important parts are:
 
@@ -357,6 +361,25 @@ HTTPS UI: 192.168.1.2:443
 ```
 
 Publishing ports on the OpenWrt host would be redundant and could create conflicts with services already running on the router.
+
+## DNS listening mode
+
+Pi-hole v6 decides which clients it answers through `dns.listeningMode`, set in Compose as:
+
+```yaml
+FTLCONF_dns_listeningMode: "${DNS_LISTENING_MODE:-LOCAL}"
+```
+
+The official Pi-hole Docker example uses `ALL`, because with Docker's default bridge and published ports every query arrives through NAT from an address Pi-hole does not consider local.
+
+This deployment does not use published ports. Queries from LAN clients arrive directly on the macvlan interface from `192.168.1.0/24`, which is a subnet attached to the container. `LOCAL` therefore answers every LAN client, including clients behind a dumb AP, and refuses everything else.
+
+Set `DNS_LISTENING_MODE=ALL` in `.env` only when clients on other OpenWrt subnets must use Pi-hole, for example:
+
+- a guest VLAN such as `192.168.2.0/24`
+- a WireGuard or OpenVPN client subnet
+
+`ALL` is safe here only because the OpenWrt firewall does not forward WAN traffic to `192.168.1.2`. Never add a WAN port forward to Pi-hole.
 
 ## Why not use host networking?
 
