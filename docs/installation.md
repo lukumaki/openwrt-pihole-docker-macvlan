@@ -842,28 +842,70 @@ ping -c 4 openwrt.org
 
 ## 15. Advertise Pi-hole through DHCP
 
-Tell OpenWrt DHCP clients to use Pi-hole:
+This step switches every device on your network to Pi-hole. It does two things:
+
+1. **IPv4:** DHCP option 6 tells devices "use `192.168.1.2` for DNS".
+2. **IPv6:** if your router hands out IPv6 (most current ISPs provide it), OpenWrt also tells devices "use me for DNS" through IPv6 router advertisements and DHCPv6. Devices then ask the router directly and **skip Pi-hole**, so ads still appear on some phones and laptops. `dns_service '0'` switches that announcement off. IPv6 itself keeps working; only the router's DNS announcement stops.
+
+Save a copy of the current DHCP settings first, so you can undo this step:
 
 ```sh
-uci -q delete dhcp.lan.dhcp_option
+cp /etc/config/dhcp /root/dhcp.before-pihole
+uci -q show dhcp.lan.dhcp_option
+```
+
+If the last command prints existing options, keep them. The commands below only add Pi-hole's entry.
+
+Apply:
+
+```sh
+uci -q del_list dhcp.lan.dhcp_option='6,192.168.1.2'
 uci add_list dhcp.lan.dhcp_option='6,192.168.1.2'
+uci set dhcp.lan.dns_service='0'
 uci commit dhcp
 /etc/init.d/dnsmasq restart
+/etc/init.d/odhcpd restart
 ```
+
+A line such as `udhcpc: no lease, failing` during the restart is normal: OpenWrt checks that no other DHCP server is on the LAN.
 
 Verify:
 
 ```sh
 uci show dhcp.lan.dhcp_option
+uci show dhcp.lan.dns_service
+nslookup openwrt.org
 ```
 
 Expected:
 
 ```text
 dhcp.lan.dhcp_option='6,192.168.1.2'
+dhcp.lan.dns_service='0'
 ```
 
-Clients may need to renew their DHCP leases or reconnect to the network.
+and `nslookup` still answers, because the router keeps using its own dnsmasq.
+
+Devices switch when they renew their lease (within the lease time, 12 hours by default), or immediately when you reconnect them to Wi-Fi or cable. Phones and laptops may remember the old IPv6 DNS for a while; turning Wi-Fi off and on fixes that.
+
+On a Linux client, check which DNS servers it received:
+
+```sh
+nmcli dev show | grep -i dns
+```
+
+Only `192.168.1.2` should be listed, with no IPv6 DNS address.
+
+To undo this step:
+
+```sh
+cp /root/dhcp.before-pihole /etc/config/dhcp
+/etc/init.d/dnsmasq restart
+/etc/init.d/odhcpd restart
+```
+
+> [!NOTE]
+> Tested on OpenWrt 25.12.6: `dns_service` is supported by its `odhcpd`. On much older releases, check with `strings /usr/sbin/odhcpd | grep dns_service`.
 
 ## 16. Test from a LAN client
 

@@ -566,6 +566,7 @@ A complete installation should pass all of these checks:
 - [ ] OpenWrt resolves hostnames
 - [ ] `apk update` (or `opkg update` on older releases) works
 - [ ] DHCP advertises `192.168.1.2`
+- [ ] The router does not announce itself as IPv6 DNS (`dhcp.lan.dns_service='0'`)
 - [ ] Clients report Pi-hole as their DNS server
 - [ ] Normal domains resolve
 - [ ] Blocked domains return a blocking response

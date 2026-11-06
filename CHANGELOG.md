@@ -23,6 +23,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `scripts/create-networks.sh`: creates both Docker networks after checking for conflicts
 - Beginner explanations of the clean starting point, the OpenWrt dependencies, Pi-hole's folders and the macvlan network
 - Instructions for copying the project to the router with `scp -O`
+- Step 15 now stops OpenWrt announcing itself as IPv6 DNS (`dns_service '0'`), so devices cannot bypass Pi-hole over IPv6, plus a matching troubleshooting entry
+- Backup and undo commands for the firewall and DHCP steps
 
 ### Changed
 
